@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg: #0d100c;
+  --color-surface: #161a14;
+  --color-surface-2: #1d231b;
+  --color-border: #2a3127;
+  --color-border-strong: #3b4536;
+
+  --color-fg: #f3ecdc;
+  --color-fg-muted: #a8a496;
+  --color-fg-subtle: #6e6c62;
+
+  --color-ember: #e88a3a;
+  --color-ember-hover: #f29d52;
+  --color-ember-dim: #b56821;
+
+  --color-moss: #8aa66b;
+  --color-moss-dim: #5d7546;
+
+  --color-rust: #c75a3c;
+  --color-success: #6ea05c;
+  --color-warn: #d99a3a;
+  --color-danger: #d05a4a;
+
+  --font-display: var(--font-display), "Anton", "Antonio", "Bebas Neue", "Impact", sans-serif;
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+h1.font-display, h2.font-display, .font-display {
+  font-weight: 400;
+}
+
+input, textarea, select, button {
+  font: inherit;
+  color: inherit;
+}
+
+input::placeholder, textarea::placeholder { color: var(--color-fg-subtle); }
+
+/* subtle grain so dark surfaces don't look flat */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 3px 3px;
+  z-index: 0;
+}
+
+/* Keep main above the body::before grain, but DON'T touch the header's
+   Tailwind z-20 — otherwise the hamburger dropdown gets buried under the
+   page content. */
+main { position: relative; z-index: 1; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
