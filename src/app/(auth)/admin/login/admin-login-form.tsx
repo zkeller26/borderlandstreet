@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Shield } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,15 @@ export function AdminLoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </Field>
+
+        <div className="text-right">
+          <Link
+            href="/forgot-password"
+            className="text-xs text-fg-muted hover:text-ember"
+          >
+            Forgot password?
+          </Link>
+        </div>
 
         {error && (
           <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
