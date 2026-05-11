@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { MapPin, Loader2, Check, X, Map } from "lucide-react";
+import { MapPin, Loader2, Check, Map, AlertTriangle } from "lucide-react";
 
 const PinPickerMap = dynamic(() => import("./pin-picker-map"), {
   ssr: false,
@@ -15,6 +15,9 @@ const PinPickerMap = dynamic(() => import("./pin-picker-map"), {
 
 type Coords = { lat: number; lng: number };
 
+const SILENT_FAIL_TIMEOUT_MS = 6000;
+const GEO_TIMEOUT_MS = 15000;
+
 function isIOSSafari(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -25,22 +28,22 @@ function isIOSSafari(): boolean {
 
 function describeError(err: GeolocationPositionError): {
   short: string;
-  hint: string | null;
+  hint: string;
 } {
   switch (err.code) {
-    case 1: // PERMISSION_DENIED
+    case 1:
       return {
         short: "Location permission denied",
         hint: isIOSSafari()
-          ? "Tap the 'aA' button in the URL bar → Website Settings → Location → Allow. Or use the map below."
-          : "Allow location for this site in your browser settings, or use the map below.",
+          ? "Tap the 'aA' button in your URL bar → Website Settings → Location → Allow. Or just drop your pin on the map below."
+          : "Allow location for this site in your browser, or use the map below.",
       };
-    case 2: // POSITION_UNAVAILABLE
+    case 2:
       return {
         short: "Couldn't determine your location",
-        hint: "GPS may be weak — try moving outside, or drop your pin on the map below.",
+        hint: "GPS may be weak. Try moving outside, or drop your pin on the map below.",
       };
-    case 3: // TIMEOUT
+    case 3:
       return {
         short: "Location request timed out",
         hint: "Try again, or drop your pin on the map below.",
@@ -53,49 +56,66 @@ function describeError(err: GeolocationPositionError): {
 export function GeoButton({ required = false }: { required?: boolean }) {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ short: string; hint: string | null } | null>(
+  const [error, setError] = useState<{ short: string; hint: string } | null>(
     null,
   );
-  const [showMap, setShowMap] = useState(false);
-  const [permissionState, setPermissionState] =
-    useState<PermissionState | null>(null);
+  const silentFailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Probe Permissions API on mount so we can warn proactively if denied
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("permissions" in navigator)) return;
-    navigator.permissions
-      .query({ name: "geolocation" as PermissionName })
-      .then((status) => {
-        setPermissionState(status.state);
-        status.onchange = () => setPermissionState(status.state);
-      })
-      .catch(() => {});
-  }, []);
+  function clearSilentFailTimer() {
+    if (silentFailTimerRef.current) {
+      clearTimeout(silentFailTimerRef.current);
+      silentFailTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => () => clearSilentFailTimer(), []);
 
   function grab() {
     if (!navigator.geolocation) {
       setError({
-        short: "Geolocation isn't supported on this device.",
+        short: "Geolocation isn't supported on this device",
         hint: "Drop your pin on the map below.",
       });
       return;
     }
-    // Call geolocation FIRST inside the user-gesture handler so Safari
-    // recognises this as an authentic user-initiated request.
+
+    // Fire the API call FIRST inside the user-gesture handler so iOS Safari
+    // ties it to the click. Anything else (setState, etc.) goes after.
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        clearSilentFailTimer();
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setBusy(false);
         setError(null);
       },
       (err) => {
+        clearSilentFailTimer();
         setError(describeError(err));
         setBusy(false);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      {
+        enableHighAccuracy: true,
+        timeout: GEO_TIMEOUT_MS,
+        maximumAge: 0,
+      },
     );
+
     setBusy(true);
     setError(null);
+
+    // Safari sometimes silently no-ops when a site permission was previously
+    // denied — neither callback fires. Surface our own error after 6s so the
+    // UI doesn't hang on a spinner.
+    clearSilentFailTimer();
+    silentFailTimerRef.current = setTimeout(() => {
+      setError({
+        short: "No response from your browser",
+        hint: isIOSSafari()
+          ? "iOS Safari may have silently blocked the request. Tap 'aA' in URL bar → Website Settings → Location → Allow, then try again. Or drop your pin on the map below."
+          : "Drop your pin on the map below to continue.",
+      });
+      setBusy(false);
+    }, SILENT_FAIL_TIMEOUT_MS);
   }
 
   function handleManualPick(lat: number, lng: number) {
@@ -104,7 +124,7 @@ export function GeoButton({ required = false }: { required?: boolean }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <input
         type="hidden"
         name="lat"
@@ -138,67 +158,47 @@ export function GeoButton({ required = false }: { required?: boolean }) {
           ? `Pinned · ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
           : busy
             ? "Getting location…"
-            : required
-              ? "Use my GPS (required)"
-              : "Use my GPS"}
+            : "Use my GPS"}
       </button>
 
       {error && (
-        <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs">
-          <p className="font-medium text-danger">{error.short}</p>
-          {error.hint && <p className="mt-0.5 text-fg-muted">{error.hint}</p>}
-        </div>
-      )}
-
-      {permissionState === "denied" && !error && !coords && (
-        <p className="rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-          Location is blocked for this site.{" "}
-          {isIOSSafari()
-            ? "Tap 'aA' in URL bar → Website Settings → Location → Allow."
-            : "Allow it in browser settings,"}{" "}
-          or drop your pin on the map below.
-        </p>
-      )}
-
-      {/* Always-available manual fallback */}
-      {!showMap ? (
-        <button
-          type="button"
-          onClick={() => setShowMap(true)}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong bg-transparent px-4 py-2.5 text-sm text-fg-muted transition-colors hover:border-ember/40 hover:text-ember"
-        >
-          <Map className="h-4 w-4" />
-          {coords ? "Adjust pin on map" : "Drop a pin on the map instead"}
-        </button>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-fg-muted">
-            <span>Tap anywhere on the map to drop your pin.</span>
-            <button
-              type="button"
-              onClick={() => setShowMap(false)}
-              className="grid h-6 w-6 place-items-center rounded-md text-fg-subtle hover:bg-surface hover:text-fg"
-              aria-label="Close map"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+          <div>
+            <p className="font-medium text-danger">{error.short}</p>
+            <p className="mt-0.5 text-fg-muted">{error.hint}</p>
           </div>
-          <PinPickerMap initial={coords ?? null} onPick={handleManualPick} />
-          {coords && (
-            <button
-              type="button"
-              onClick={() => setShowMap(false)}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success/15 px-4 py-2.5 text-sm font-medium text-success hover:bg-success/25"
-            >
-              <Check className="h-4 w-4" /> Confirm pin
-            </button>
-          )}
         </div>
       )}
+
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 right-0 top-1/2 -translate-y-1/2">
+          <div className="border-t border-border" />
+        </div>
+        <p className="relative mx-auto inline-block bg-bg px-2 text-center text-[10px] uppercase tracking-wider text-fg-subtle">
+          or
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface-2/30 p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
+          <Map className="h-3.5 w-3.5 text-ember" />
+          <span>
+            <span className="font-medium text-fg">Tap the map</span> to drop a
+            pin where the poster is
+          </span>
+        </div>
+        <PinPickerMap initial={coords ?? null} onPick={handleManualPick} />
+        {coords && (
+          <p className="mt-2 text-center text-xs text-success">
+            ✓ Pin placed · {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
+          </p>
+        )}
+      </div>
 
       {required && !coords && !busy && !error && (
         <p className="text-xs text-fg-muted">
-          GPS is required so admins can map where posters were placed.
+          A pin is required so admins can map where posters were placed.
         </p>
       )}
     </div>
