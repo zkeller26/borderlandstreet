@@ -27,9 +27,13 @@ function ClickableLayer({
 
 export default function PinPickerMap({
   initial,
+  centerOn,
   onPick,
 }: {
+  /** Pre-existing pin — both centers map AND drops a visible marker */
   initial?: { lat: number; lng: number } | null;
+  /** Center the view here, but don't drop a marker (e.g., user's GPS for context) */
+  centerOn?: { lat: number; lng: number } | null;
   onPick: (lat: number, lng: number) => void;
 }) {
   const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(
@@ -37,13 +41,17 @@ export default function PinPickerMap({
   );
   const center: [number, number] = marker
     ? [marker.lat, marker.lng]
-    : [42.8864, -78.8784]; // default Buffalo
+    : centerOn
+      ? [centerOn.lat, centerOn.lng]
+      : [42.8864, -78.8784]; // default Buffalo
+
+  const zoom = marker || centerOn ? 15 : 11;
 
   return (
     <div className="h-[55vh] overflow-hidden rounded-2xl border border-border">
       <MapContainer
         center={center}
-        zoom={marker ? 15 : 11}
+        zoom={zoom}
         style={{ height: "100%", width: "100%", background: "#0d100c" }}
         scrollWheelZoom
       >

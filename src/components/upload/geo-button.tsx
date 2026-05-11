@@ -55,6 +55,7 @@ function describeError(err: GeolocationPositionError): {
 
 export function GeoButton({ required = false }: { required?: boolean }) {
   const [coords, setCoords] = useState<Coords | null>(null);
+  const [mapCenter, setMapCenter] = useState<Coords | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ short: string; hint: string } | null>(
     null,
@@ -69,6 +70,39 @@ export function GeoButton({ required = false }: { required?: boolean }) {
   }
 
   useEffect(() => () => clearSilentFailTimer(), []);
+
+  // If location is already granted for this site, silently auto-center
+  // the fallback map on the user's location. Skips entirely if permission
+  // is "prompt" or "denied" — no surprise prompts.
+  useEffect(() => {
+    if (
+      typeof navigator === "undefined" ||
+      !("permissions" in navigator) ||
+      !navigator.geolocation
+    )
+      return;
+    let cancelled = false;
+    navigator.permissions
+      .query({ name: "geolocation" as PermissionName })
+      .then((status) => {
+        if (status.state !== "granted") return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (cancelled) return;
+            setMapCenter({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            });
+          },
+          () => {},
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function grab() {
     if (!navigator.geolocation) {
@@ -188,7 +222,11 @@ export function GeoButton({ required = false }: { required?: boolean }) {
             pin where the poster is
           </span>
         </div>
-        <PinPickerMap initial={coords ?? null} onPick={handleManualPick} />
+        <PinPickerMap
+          initial={coords ?? null}
+          centerOn={mapCenter}
+          onPick={handleManualPick}
+        />
         {coords && (
           <p className="mt-2 text-center text-xs text-success">
             ✓ Pin placed · {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
