@@ -53,9 +53,7 @@ export default async function TeamMemberPage({
     supabase
       .from("admin_messages")
       .select("*")
-      .or(
-        `and(from_user_id.eq.${user.id},to_user_id.eq.${id}),and(from_user_id.eq.${id},to_user_id.eq.${user.id})`,
-      )
+      .or(`from_user_id.eq.${id},to_user_id.eq.${id}`)
       .order("created_at", { ascending: true }),
     supabase
       .from("material_requests")
@@ -296,15 +294,15 @@ export default async function TeamMemberPage({
             </p>
           ) : (
             (messages ?? []).map((m) => {
-              const fromMe = m.from_user_id === user.id;
+              const fromAdmin = m.from_user_id !== id;
               return (
                 <div
                   key={m.id}
-                  className={`flex ${fromMe ? "justify-end" : "justify-start"}`}
+                  className={`flex ${fromAdmin ? "justify-end" : "justify-start"}`}
                 >
                   <div
                     className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
-                      fromMe
+                      fromAdmin
                         ? "bg-ember text-bg"
                         : "border border-border bg-surface-2 text-fg"
                     }`}
@@ -312,7 +310,7 @@ export default async function TeamMemberPage({
                     <p className="whitespace-pre-wrap">{m.body}</p>
                     <p
                       className={`mt-1 text-[10px] ${
-                        fromMe ? "text-bg/60" : "text-fg-subtle"
+                        fromAdmin ? "text-bg/60" : "text-fg-subtle"
                       }`}
                     >
                       {formatRelative(m.created_at)}

@@ -26,12 +26,12 @@ export default async function MessageThreadPage({
     .single();
   if (!ambassador) notFound();
 
+  // All messages involving this ambassador, regardless of which admin row
+  // they were addressed to/from. RLS lets any admin read every row.
   const { data: messages } = await supabase
     .from("admin_messages")
     .select("*")
-    .or(
-      `and(from_user_id.eq.${user.id},to_user_id.eq.${id}),and(from_user_id.eq.${id},to_user_id.eq.${user.id})`,
-    )
+    .or(`from_user_id.eq.${id},to_user_id.eq.${id}`)
     .order("created_at", { ascending: true });
 
   return (
@@ -57,15 +57,16 @@ export default async function MessageThreadPage({
           </p>
         ) : (
           (messages ?? []).map((m) => {
-            const fromMe = m.from_user_id === user.id;
+            // Anything NOT from the ambassador is from the admin side
+            const fromAdmin = m.from_user_id !== id;
             return (
               <div
                 key={m.id}
-                className={`flex ${fromMe ? "justify-end" : "justify-start"}`}
+                className={`flex ${fromAdmin ? "justify-end" : "justify-start"}`}
               >
                 <div
                   className={`max-w-[75%] rounded-2xl px-4 py-2 text-[15px] ${
-                    fromMe
+                    fromAdmin
                       ? "bg-ember text-bg"
                       : "border border-border bg-surface-2 text-fg"
                   }`}
@@ -73,7 +74,7 @@ export default async function MessageThreadPage({
                   <p className="whitespace-pre-wrap">{m.body}</p>
                   <p
                     className={`mt-1 text-[10px] ${
-                      fromMe ? "text-bg/60" : "text-fg-subtle"
+                      fromAdmin ? "text-bg/60" : "text-fg-subtle"
                     }`}
                   >
                     {formatRelative(m.created_at)}

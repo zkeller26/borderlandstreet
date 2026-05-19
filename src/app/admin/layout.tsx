@@ -23,22 +23,33 @@ export default async function AdminLayout({
 
   if ((profile as Profile | null)?.role !== "admin") redirect("/admin/login");
 
-  // Count things that should drive the notification dot:
-  // pending material requests + unread inbound messages to this admin
-  const [{ count: pendingRequestsCount }, { count: unreadCount }] =
-    await Promise.all([
-      supabase
-        .from("material_requests")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("admin_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("to_user_id", user.id)
-        .is("read_at", null),
-    ]);
+  // Notification dot reflects work pending for the admin team as a whole:
+  // (a) any pending material requests, and (b) any unread message from an
+  // ambassador to any admin. Ambassador IDs are pre-resolved so admin↔admin
+  // chatter doesn't inflate the count.
+  const [
+    { count: pendingRequestsCount },
+    { data: ambassadors },
+  ] = await Promise.all([
+    supabase
+      .from("material_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase.from("profiles").select("id").eq("role", "ambassador"),
+  ]);
 
-  const pendingCount = (pendingRequestsCount ?? 0) + (unreadCount ?? 0);
+  let unreadCount = 0;
+  const ambassadorIds = (ambassadors ?? []).map((a) => a.id);
+  if (ambassadorIds.length > 0) {
+    const { count } = await supabase
+      .from("admin_messages")
+      .select("id", { count: "exact", head: true })
+      .in("from_user_id", ambassadorIds)
+      .is("read_at", null);
+    unreadCount = count ?? 0;
+  }
+
+  const pendingCount = (pendingRequestsCount ?? 0) + unreadCount;
 
   return (
     <div className="min-h-dvh">

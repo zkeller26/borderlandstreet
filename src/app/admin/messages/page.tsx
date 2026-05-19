@@ -28,10 +28,12 @@ export default async function MessagesAndRequestsPage() {
         .select("id, full_name, school")
         .eq("role", "ambassador")
         .order("full_name"),
+      // Fetch ALL recent messages (admin RLS allows it). We'll match each
+      // one to its ambassador in JS below, so threads stay unified even
+      // when a different admin sent/received the original.
       supabase
         .from("admin_messages")
         .select("from_user_id, to_user_id, body, created_at, read_at")
-        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
@@ -50,16 +52,25 @@ export default async function MessagesAndRequestsPage() {
   };
   const pendingRequests = (requestRows ?? []) as Joined[];
 
-  const lastByOther = new Map<
+  // For each message find the ambassador party (either sender or recipient).
+  // Anything that doesn't involve an ambassador (e.g. admin-to-admin) is skipped.
+  const ambassadorIds = new Set((ambassadors ?? []).map((a) => a.id));
+  const lastByAmbassador = new Map<
     string,
     { body: string; created_at: string; unread: boolean }
   >();
   for (const m of recent ?? []) {
-    const other = m.from_user_id === user.id ? m.to_user_id : m.from_user_id;
-    const isInbound = m.to_user_id === user.id && !m.read_at;
-    const existing = lastByOther.get(other);
+    const ambId = ambassadorIds.has(m.from_user_id)
+      ? m.from_user_id
+      : ambassadorIds.has(m.to_user_id)
+        ? m.to_user_id
+        : null;
+    if (!ambId) continue;
+    // "Unread" means the message came FROM the ambassador and hasn't been read yet
+    const isInbound = m.from_user_id === ambId && !m.read_at;
+    const existing = lastByAmbassador.get(ambId);
     if (!existing) {
-      lastByOther.set(other, {
+      lastByAmbassador.set(ambId, {
         body: m.body,
         created_at: m.created_at,
         unread: isInbound,
@@ -68,6 +79,8 @@ export default async function MessagesAndRequestsPage() {
       existing.unread = true;
     }
   }
+  // Keep the existing variable name used below
+  const lastByOther = lastByAmbassador;
 
   return (
     <div className="space-y-8">
