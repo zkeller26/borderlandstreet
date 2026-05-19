@@ -164,8 +164,10 @@ export async function createMaterialRequestAction(
 
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/requests");
-  redirect(`/requests?submitted=${type}`);
+  // URL slug is plural ("posters" / "flyers"); the DB type is singular ("poster" / "flyer")
+  const slug = `${type}s`;
+  revalidatePath(`/requests/${slug}`);
+  redirect(`/requests/${slug}?submitted=${type}`);
 }
 
 export async function sendAmbassadorMessageAction(formData: FormData) {
