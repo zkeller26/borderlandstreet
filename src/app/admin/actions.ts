@@ -53,6 +53,17 @@ export async function rejectSubmissionAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+export async function markThreadReadAction(ambassadorId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.rpc("mark_thread_read", { ambassador_id: ambassadorId });
+  revalidatePath("/admin/messages");
+  revalidatePath("/admin");
+}
+
 export async function sendMessageAction(formData: FormData) {
   const toUserId = formData.get("to_user_id") as string;
   const body = ((formData.get("body") as string) || "").trim();

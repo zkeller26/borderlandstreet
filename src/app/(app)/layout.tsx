@@ -15,18 +15,24 @@ export default async function AppLayout({
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { count: unreadCount }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase
+      .from("admin_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("to_user_id", user.id)
+      .is("read_at", null),
+  ]);
 
   // Admins don't see the ambassador dashboard — kick them to /admin
   if ((profile as Profile | null)?.role === "admin") redirect("/admin");
 
   return (
     <div className="min-h-dvh">
-      <AppHeader profile={(profile as Profile | null) ?? null} />
+      <AppHeader
+        profile={(profile as Profile | null) ?? null}
+        unreadCount={unreadCount ?? 0}
+      />
       <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:py-8">
         {children}
       </main>

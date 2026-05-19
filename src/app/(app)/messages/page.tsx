@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { sendAmbassadorMessageAction } from "@/app/(app)/actions";
+import { markMyMessagesReadAction } from "@/app/(app)/actions";
 import { formatRelative } from "@/lib/utils";
+import { MessageForm } from "./message-form";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ export default async function AmbassadorMessagesPage() {
     .select("*")
     .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
     .order("created_at", { ascending: true });
+
+  // Opening the thread = reading the messages
+  await markMyMessagesReadAction();
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-7.5rem)] max-w-md flex-col">
@@ -71,25 +75,7 @@ export default async function AmbassadorMessagesPage() {
         )}
       </div>
 
-      <form
-        action={sendAmbassadorMessageAction}
-        className="flex items-center gap-2 border-t border-border pt-3"
-      >
-        <input
-          name="body"
-          placeholder="Message admin…"
-          required
-          autoComplete="off"
-          className="h-11 flex-1 rounded-xl border border-border bg-surface-2 px-4 text-fg outline-none placeholder:text-fg-subtle focus:border-ember/60"
-        />
-        <button
-          type="submit"
-          className="grid h-11 w-11 place-items-center rounded-xl bg-ember text-bg transition-colors hover:bg-ember-hover"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" />
-        </button>
-      </form>
+      <MessageForm />
     </div>
   );
 }

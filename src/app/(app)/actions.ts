@@ -170,30 +170,40 @@ export async function createMaterialRequestAction(
   redirect(`/requests/${slug}?submitted=${type}`);
 }
 
-export async function sendAmbassadorMessageAction(formData: FormData) {
+export async function sendAmbassadorMessageAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const body = ((formData.get("body") as string) || "").trim();
+  if (!body) return { ok: false, error: "Write a message before sending." };
+
+  // Use the SECURITY DEFINER RPC — ambassadors can't see admin profile rows
+  // directly because of profiles RLS, so doing the lookup + insert inline
+  // would silently fail (empty admin list → no insert).
+  const { error } = await supabase.rpc("send_message_to_admins", {
+    message_body: body,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/messages");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function markMyMessagesReadAction() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return;
-
-  const body = ((formData.get("body") as string) || "").trim();
-  if (!body) return;
-
-  const { data: admins } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("role", "admin")
-    .limit(1);
-
-  const adminId = admins?.[0]?.id;
-  if (!adminId) return;
-
-  await supabase.from("admin_messages").insert({
-    from_user_id: user.id,
-    to_user_id: adminId,
-    body,
-  });
-
+  await supabase.rpc("mark_messages_from_admin_read");
   revalidatePath("/messages");
+  revalidatePath("/dashboard");
 }

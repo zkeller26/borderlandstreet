@@ -34,6 +34,9 @@ export default async function MessageThreadPage({
     .or(`from_user_id.eq.${id},to_user_id.eq.${id}`)
     .order("created_at", { ascending: true });
 
+  // Opening the thread marks all inbound messages from this ambassador as read
+  await supabase.rpc("mark_thread_read", { ambassador_id: id });
+
   return (
     <div className="mx-auto flex h-[calc(100dvh-7.5rem)] max-w-2xl flex-col">
       <header className="flex items-center gap-3 border-b border-border pb-3">

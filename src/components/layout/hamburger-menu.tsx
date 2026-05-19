@@ -16,11 +16,11 @@ import { signOutAction } from "@/app/(app)/actions";
 import type { Profile } from "@/types/database";
 
 const ITEMS = [
-  { href: "/profile", label: "Edit profile", icon: UserCog },
-  { href: "/messages", label: "Message admin", icon: MessageCircle },
-  { href: "/requests/posters", label: "Request posters", icon: FileText },
-  { href: "/requests/flyers", label: "Request flyers", icon: Package },
-  { href: "/guide", label: "Street Team Guide", icon: BookOpen },
+  { href: "/profile", label: "Edit profile", icon: UserCog, key: "profile" as const },
+  { href: "/messages", label: "Message admin", icon: MessageCircle, key: "messages" as const },
+  { href: "/requests/posters", label: "Request posters", icon: FileText, key: "posters" as const },
+  { href: "/requests/flyers", label: "Request flyers", icon: Package, key: "flyers" as const },
+  { href: "/guide", label: "Street Team Guide", icon: BookOpen, key: "guide" as const },
 ] as const;
 
 export function HamburgerMenu({ profile }: { profile: Profile | null }) {
