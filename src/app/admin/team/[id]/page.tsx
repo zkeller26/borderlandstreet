@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, Package, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -11,7 +11,11 @@ import { TICKET_GOAL, TYPE_LABEL } from "@/lib/points";
 import { formatRelative } from "@/lib/utils";
 import { sendMessageAction } from "@/app/admin/actions";
 import { TeamMemberEditor } from "./team-member-editor";
-import type { Submission, Profile } from "@/types/database";
+import type {
+  Submission,
+  Profile,
+  MaterialRequest,
+} from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -34,22 +38,31 @@ export default async function TeamMemberPage({
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: profile }, { data: subs }, { data: messages }] =
-    await Promise.all([
-      supabase.from("profiles").select("*").eq("id", id).single(),
-      supabase
-        .from("submissions")
-        .select("*")
-        .eq("user_id", id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("admin_messages")
-        .select("*")
-        .or(
-          `and(from_user_id.eq.${user.id},to_user_id.eq.${id}),and(from_user_id.eq.${id},to_user_id.eq.${user.id})`,
-        )
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: profile },
+    { data: subs },
+    { data: messages },
+    { data: matReqs },
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", id).single(),
+    supabase
+      .from("submissions")
+      .select("*")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("admin_messages")
+      .select("*")
+      .or(
+        `and(from_user_id.eq.${user.id},to_user_id.eq.${id}),and(from_user_id.eq.${id},to_user_id.eq.${user.id})`,
+      )
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("material_requests")
+      .select("*")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (!profile) notFound();
 
@@ -66,6 +79,18 @@ export default async function TeamMemberPage({
   const flyersTotal = byType.event
     .filter((s) => s.status === "approved")
     .reduce((sum, s) => sum + (s.flyer_count ?? 0), 0);
+
+  // Materials shipped/requested tracker
+  const matRequests = (matReqs ?? []) as MaterialRequest[];
+  const postersShipped = matRequests
+    .filter((r) => r.type === "poster" && r.status === "fulfilled")
+    .reduce((sum, r) => sum + r.quantity, 0);
+  const flyersShipped = matRequests
+    .filter((r) => r.type === "flyer" && r.status === "fulfilled")
+    .reduce((sum, r) => sum + r.quantity, 0);
+  const pendingRequests = matRequests.filter(
+    (r) => r.status === "pending",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -114,6 +139,90 @@ export default async function TeamMemberPage({
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-fg-muted">
+            Materials shipped
+          </h2>
+          {pendingRequests > 0 && (
+            <Link
+              href="/admin/messages"
+              className="text-xs text-warn hover:underline"
+            >
+              {pendingRequests} pending request
+              {pendingRequests === 1 ? "" : "s"} →
+            </Link>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-2/40 px-4 py-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-ember/15 text-ember">
+              <FileText className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {postersShipped}
+              </p>
+              <p className="text-xs text-fg-muted">posters shipped</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-2/40 px-4 py-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-ember/15 text-ember">
+              <Package className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {flyersShipped}
+              </p>
+              <p className="text-xs text-fg-muted">flyers shipped</p>
+            </div>
+          </div>
+        </div>
+
+        {matRequests.length > 0 && (
+          <ul className="mt-4 divide-y divide-border rounded-xl border border-border">
+            {matRequests.slice(0, 8).map((r) => {
+              const Icon = r.type === "poster" ? FileText : Package;
+              const tone =
+                r.status === "fulfilled"
+                  ? "approved"
+                  : r.status === "cancelled"
+                    ? "rejected"
+                    : "pending";
+              return (
+                <li
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Icon className="h-4 w-4 shrink-0 text-fg-muted" />
+                    <div className="min-w-0">
+                      <p>
+                        <span className="font-medium tabular-nums">
+                          {r.quantity}
+                        </span>{" "}
+                        <span className="text-fg-muted">
+                          {r.type}
+                          {r.quantity > 1 ? "s" : ""}
+                        </span>
+                      </p>
+                      <p className="text-xs text-fg-subtle">
+                        {r.status === "fulfilled" && r.fulfilled_at
+                          ? `shipped ${formatRelative(r.fulfilled_at)}`
+                          : `requested ${formatRelative(r.created_at)}`}
+                        {r.notes ? ` · ${r.notes}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge tone={tone}>{r.status}</Badge>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Card>
 
       <Card>
