@@ -28,12 +28,16 @@ function SendButton() {
 
 export function ComposeMessage({
   ambassadors,
+  admins = [],
 }: {
   ambassadors: { id: string; full_name: string }[];
+  /** Other admins (excluding the current admin) */
+  admins?: { id: string; full_name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [recipientId, setRecipientId] = useState("");
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -54,6 +58,7 @@ export function ComposeMessage({
   function close() {
     setOpen(false);
     setConfirmation(null);
+    setError(null);
     setRecipientId("");
     formRef.current?.reset();
   }
@@ -63,7 +68,7 @@ export function ComposeMessage({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        disabled={ambassadors.length === 0}
+        disabled={ambassadors.length === 0 && admins.length === 0}
         className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ember px-4 text-sm font-medium text-bg transition-colors hover:bg-ember-hover disabled:opacity-50"
       >
         <Send className="h-4 w-4" />
@@ -104,11 +109,18 @@ export function ComposeMessage({
             <form
               ref={formRef}
               action={async (fd) => {
-                const isAll = recipientId === ALL_RECIPIENTS;
-                const body = (fd.get("body") as string)?.trim();
-                if (!body || !recipientId) return;
+                setError(null);
+                const body = ((fd.get("body") as string) ?? "").trim();
+                if (!recipientId) {
+                  setError("Pick a recipient first.");
+                  return;
+                }
+                if (!body) {
+                  setError("Write a message.");
+                  return;
+                }
 
-                if (isAll) {
+                if (recipientId === ALL_RECIPIENTS) {
                   const result = await broadcastMessageAction(fd);
                   setConfirmation(
                     `✓ Sent to ${result?.sent ?? ambassadors.length} team member${
@@ -118,11 +130,11 @@ export function ComposeMessage({
                 } else {
                   fd.set("to_user_id", recipientId);
                   await sendMessageAction(fd);
-                  const recipient = ambassadors.find(
-                    (a) => a.id === recipientId,
-                  );
+                  const recipient =
+                    admins.find((a) => a.id === recipientId) ??
+                    ambassadors.find((a) => a.id === recipientId);
                   setConfirmation(
-                    `✓ Sent to ${recipient?.full_name ?? "ambassador"}`,
+                    `✓ Sent to ${recipient?.full_name ?? "recipient"}`,
                   );
                 }
 
@@ -139,8 +151,12 @@ export function ComposeMessage({
                 </label>
                 <RecipientPicker
                   ambassadors={ambassadors}
+                  admins={admins}
                   value={recipientId}
-                  onChange={setRecipientId}
+                  onChange={(id) => {
+                    setRecipientId(id);
+                    setError(null);
+                  }}
                 />
               </div>
 
@@ -160,6 +176,12 @@ export function ComposeMessage({
                   className="w-full resize-y rounded-xl border border-border bg-surface-2 px-4 py-3 text-fg outline-none placeholder:text-fg-subtle focus:border-ember/60"
                 />
               </div>
+
+              {error && (
+                <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                  {error}
+                </p>
+              )}
 
               <div className="flex items-center justify-between gap-3">
                 {confirmation ? (

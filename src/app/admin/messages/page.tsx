@@ -21,29 +21,39 @@ export default async function MessagesAndRequestsPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: ambassadors }, { data: recent }, { data: requestRows }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, full_name, school")
-        .eq("role", "ambassador")
-        .order("full_name"),
-      // Fetch ALL recent messages (admin RLS allows it). We'll match each
-      // one to its ambassador in JS below, so threads stay unified even
-      // when a different admin sent/received the original.
-      supabase
-        .from("admin_messages")
-        .select("from_user_id, to_user_id, body, created_at, read_at")
-        .order("created_at", { ascending: false })
-        .limit(500),
-      supabase
-        .from("material_requests")
-        .select(
-          "*, profiles!material_requests_user_id_fkey(full_name, shipping_address, phone)",
-        )
-        .eq("status", "pending")
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: ambassadors },
+    { data: otherAdmins },
+    { data: recent },
+    { data: requestRows },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, school")
+      .eq("role", "ambassador")
+      .order("full_name"),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("role", "admin")
+      .neq("id", user.id)
+      .order("full_name"),
+    // Fetch ALL recent messages (admin RLS allows it). We'll match each
+    // one to its ambassador in JS below, so threads stay unified even
+    // when a different admin sent/received the original.
+    supabase
+      .from("admin_messages")
+      .select("from_user_id, to_user_id, body, created_at, read_at")
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("material_requests")
+      .select(
+        "*, profiles!material_requests_user_id_fkey(full_name, shipping_address, phone)",
+      )
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
+  ]);
 
   type Joined = MaterialRequest & {
     profiles:
@@ -52,25 +62,29 @@ export default async function MessagesAndRequestsPage() {
   };
   const pendingRequests = (requestRows ?? []) as Joined[];
 
-  // For each message find the ambassador party (either sender or recipient).
-  // Anything that doesn't involve an ambassador (e.g. admin-to-admin) is skipped.
+  // Resolve each message's "other party" — the participant that isn't the
+  // current admin. Skip admin↔admin chatter that doesn't involve you.
   const ambassadorIds = new Set((ambassadors ?? []).map((a) => a.id));
-  const lastByAmbassador = new Map<
+  const otherAdminIds = new Set((otherAdmins ?? []).map((a) => a.id));
+  const lastByOther = new Map<
     string,
     { body: string; created_at: string; unread: boolean }
   >();
   for (const m of recent ?? []) {
-    const ambId = ambassadorIds.has(m.from_user_id)
-      ? m.from_user_id
-      : ambassadorIds.has(m.to_user_id)
-        ? m.to_user_id
-        : null;
-    if (!ambId) continue;
-    // "Unread" means the message came FROM the ambassador and hasn't been read yet
-    const isInbound = m.from_user_id === ambId && !m.read_at;
-    const existing = lastByAmbassador.get(ambId);
+    // Pick the participant that is either an ambassador or another admin
+    // (and not the current viewer).
+    const candidates = [m.from_user_id, m.to_user_id].filter(
+      (uid) => uid !== user.id,
+    );
+    const otherId =
+      candidates.find(
+        (uid) => ambassadorIds.has(uid) || otherAdminIds.has(uid),
+      ) ?? null;
+    if (!otherId) continue;
+    const isInbound = m.to_user_id === user.id && !m.read_at;
+    const existing = lastByOther.get(otherId);
     if (!existing) {
-      lastByAmbassador.set(ambId, {
+      lastByOther.set(otherId, {
         body: m.body,
         created_at: m.created_at,
         unread: isInbound,
@@ -79,8 +93,6 @@ export default async function MessagesAndRequestsPage() {
       existing.unread = true;
     }
   }
-  // Keep the existing variable name used below
-  const lastByOther = lastByAmbassador;
 
   return (
     <div className="space-y-8">
@@ -97,6 +109,10 @@ export default async function MessagesAndRequestsPage() {
         </div>
         <ComposeMessage
           ambassadors={(ambassadors ?? []).map((a) => ({
+            id: a.id,
+            full_name: a.full_name,
+          }))}
+          admins={(otherAdmins ?? []).map((a) => ({
             id: a.id,
             full_name: a.full_name,
           }))}
@@ -188,7 +204,60 @@ export default async function MessagesAndRequestsPage() {
         )}
       </section>
 
-      {/* ── MESSAGES ───────────────────────────────────────────────────── */}
+      {/* ── ADMIN-TO-ADMIN ─────────────────────────────────────────────── */}
+      {otherAdmins && otherAdmins.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-fg-muted">
+            <MessageCircle className="h-4 w-4" /> Admin team
+          </h2>
+          <Card className="p-0">
+            <ul className="divide-y divide-border">
+              {otherAdmins.map((a) => {
+                const last = lastByOther.get(a.id);
+                return (
+                  <li key={a.id}>
+                    <Link
+                      href={`/admin/messages/${a.id}`}
+                      className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2 sm:px-5"
+                    >
+                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ember/15 text-ember">
+                        <MessageCircle className="h-4 w-4" />
+                        {last?.unread && (
+                          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-ember ring-2 ring-bg" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`truncate text-[15px] ${last?.unread ? "font-semibold text-fg" : "font-medium text-fg"}`}
+                          >
+                            {a.full_name}
+                            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-ember">
+                              admin
+                            </span>
+                          </span>
+                          {last && (
+                            <span className="shrink-0 text-xs text-fg-subtle">
+                              {formatRelative(last.created_at)}
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={`mt-0.5 truncate text-xs ${last?.unread ? "text-fg" : "text-fg-muted"}`}
+                        >
+                          {last?.body ?? "Send the first admin DM"}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        </section>
+      )}
+
+      {/* ── MESSAGES BY TEAM MEMBER ────────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-fg-muted">
           <MessageCircle className="h-4 w-4" /> Messages by team member

@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, ChevronDown, Check, Users } from "lucide-react";
+import { Search, ChevronDown, Check, Users, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const ALL_RECIPIENTS = "__ALL__";
 
+type Person = { id: string; full_name: string };
+
 export function RecipientPicker({
   ambassadors,
+  admins = [],
   value,
   onChange,
 }: {
-  ambassadors: { id: string; full_name: string }[];
+  ambassadors: Person[];
+  /** Other admins (excluding the current admin) — render in a separate group */
+  admins?: Person[];
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -41,14 +46,25 @@ export function RecipientPicker({
   }, [open]);
 
   const q = query.trim().toLowerCase();
-  const filtered = q
-    ? ambassadors.filter((a) => a.full_name.toLowerCase().includes(q))
-    : ambassadors;
+  const filterFn = (a: Person) =>
+    !q || a.full_name.toLowerCase().includes(q);
+  const filteredAdmins = admins.filter(filterFn);
+  const filteredAmbassadors = ambassadors.filter(filterFn);
 
-  const selectedLabel =
-    value === ALL_RECIPIENTS
-      ? `All team members (${ambassadors.length})`
-      : ambassadors.find((a) => a.id === value)?.full_name;
+  // Resolve the label for the currently selected value
+  let selectedLabel: string | undefined;
+  let selectedIsAdmin = false;
+  if (value === ALL_RECIPIENTS) {
+    selectedLabel = `All team members (${ambassadors.length})`;
+  } else {
+    const admin = admins.find((a) => a.id === value);
+    if (admin) {
+      selectedLabel = admin.full_name;
+      selectedIsAdmin = true;
+    } else {
+      selectedLabel = ambassadors.find((a) => a.id === value)?.full_name;
+    }
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -64,7 +80,8 @@ export function RecipientPicker({
           )}
         >
           {value === ALL_RECIPIENTS && <Users className="h-4 w-4 text-ember" />}
-          {selectedLabel ?? "Choose a team member…"}
+          {selectedIsAdmin && <Shield className="h-4 w-4 text-ember" />}
+          {selectedLabel ?? "Choose a recipient…"}
         </span>
         <ChevronDown
           className={cn(
@@ -83,51 +100,89 @@ export function RecipientPicker({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search team members…"
+              placeholder="Search by name…"
               className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-subtle"
             />
           </div>
 
           <div className="max-h-64 overflow-y-auto">
-            {/* Pinned: Message ALL */}
-            <button
-              type="button"
-              onClick={() => {
-                onChange(ALL_RECIPIENTS);
-                setOpen(false);
-              }}
-              className="flex w-full items-center justify-between gap-2 border-b border-border bg-ember/10 px-4 py-2.5 text-left text-sm text-ember transition-colors hover:bg-ember/20"
-            >
-              <span className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Message ALL team members ({ambassadors.length})
-              </span>
-              {value === ALL_RECIPIENTS && <Check className="h-4 w-4" />}
-            </button>
-
-            {filtered.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-fg-muted">
-                No matches for "{query}"
-              </p>
-            ) : (
-              filtered.map((a) => {
-                const checked = value === a.id;
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(a.id);
-                      setOpen(false);
-                    }}
-                    className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-2"
-                  >
-                    <span>{a.full_name}</span>
-                    {checked && <Check className="h-4 w-4 text-ember" />}
-                  </button>
-                );
-              })
+            {/* Pinned: Message ALL ambassadors (only useful if there are ambassadors) */}
+            {ambassadors.length > 0 && !q && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(ALL_RECIPIENTS);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center justify-between gap-2 border-b border-border bg-ember/10 px-4 py-2.5 text-left text-sm text-ember transition-colors hover:bg-ember/20"
+              >
+                <span className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Message ALL team members ({ambassadors.length})
+                </span>
+                {value === ALL_RECIPIENTS && <Check className="h-4 w-4" />}
+              </button>
             )}
+
+            {filteredAdmins.length > 0 && (
+              <>
+                <div className="sticky top-0 border-b border-border bg-surface-2/95 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted backdrop-blur">
+                  Admins
+                </div>
+                {filteredAdmins.map((a) => {
+                  const checked = value === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        onChange(a.id);
+                        setOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-2"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-ember" />
+                        {a.full_name}
+                      </span>
+                      {checked && <Check className="h-4 w-4 text-ember" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {filteredAmbassadors.length > 0 && (
+              <>
+                <div className="sticky top-0 border-b border-border bg-surface-2/95 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted backdrop-blur">
+                  Team members
+                </div>
+                {filteredAmbassadors.map((a) => {
+                  const checked = value === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        onChange(a.id);
+                        setOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-2"
+                    >
+                      <span>{a.full_name}</span>
+                      {checked && <Check className="h-4 w-4 text-ember" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {filteredAdmins.length === 0 &&
+              filteredAmbassadors.length === 0 && (
+                <p className="px-4 py-6 text-center text-sm text-fg-muted">
+                  {q ? `No matches for "${query}"` : "No recipients available"}
+                </p>
+              )}
           </div>
         </div>
       )}
