@@ -34,7 +34,8 @@ export default async function MessageThreadPage({
     .or(`from_user_id.eq.${id},to_user_id.eq.${id}`)
     .order("created_at", { ascending: true });
 
-  // Opening the thread marks all inbound messages from this ambassador as read
+  // Opening the thread marks all inbound messages from this ambassador as read.
+  // (No revalidatePath here — that would only be valid inside a Server Action.)
   await supabase.rpc("mark_thread_read", { ambassador_id: id });
 
   return (

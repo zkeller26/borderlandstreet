@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { markMyMessagesReadAction } from "@/app/(app)/actions";
 import { formatRelative } from "@/lib/utils";
 import { MessageForm } from "./message-form";
 
@@ -20,8 +19,10 @@ export default async function AmbassadorMessagesPage() {
     .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
     .order("created_at", { ascending: true });
 
-  // Opening the thread = reading the messages
-  await markMyMessagesReadAction();
+  // Opening the thread = reading the messages. Call the RPC directly here
+  // (NOT through a wrapper action) because revalidatePath() inside a Server
+  // Component render is invalid and would crash the page.
+  await supabase.rpc("mark_messages_from_admin_read");
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-7.5rem)] max-w-md flex-col">
