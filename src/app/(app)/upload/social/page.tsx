@@ -6,6 +6,8 @@ import { UploadForm } from "@/components/upload/upload-form";
 import { SubmitButton } from "@/components/upload/submit-button";
 import { POINTS, SOCIAL_PLATFORMS } from "@/lib/points";
 
+export const dynamic = "force-dynamic";
+
 export default function SocialUploadPage() {
   return (
     <div className="mx-auto max-w-md">

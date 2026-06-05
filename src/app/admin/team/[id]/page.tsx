@@ -11,6 +11,7 @@ import { TICKET_GOAL, TYPE_LABEL } from "@/lib/points";
 import { formatRelative } from "@/lib/utils";
 import { sendMessageAction } from "@/app/admin/actions";
 import { TeamMemberEditor } from "./team-member-editor";
+import { DeleteMemberButton } from "./delete-member-button";
 import type {
   Submission,
   Profile,
@@ -338,6 +339,21 @@ export default async function TeamMemberPage({
             <Send className="h-4 w-4" />
           </button>
         </form>
+      </Card>
+
+      <Card className="border-danger/20 bg-danger/[0.02]">
+        <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-danger">
+          Danger zone
+        </h2>
+        <p className="mb-4 text-sm text-fg-muted">
+          Permanently remove this team member and all their submissions,
+          messages, and material requests. Their auth account is also deleted,
+          so they can sign up again with the same email later if needed.
+        </p>
+        <DeleteMemberButton
+          memberId={(profile as Profile).id}
+          memberName={(profile as Profile).full_name}
+        />
       </Card>
     </div>
   );

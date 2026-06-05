@@ -195,6 +195,17 @@ export function GeoButton({ required = false }: { required?: boolean }) {
             : "Use my GPS"}
       </button>
 
+      {!coords && !busy && (
+        <p className="px-1 text-[11px] leading-snug text-fg-subtle">
+          Not getting a prompt? On iPhone, check{" "}
+          <span className="text-fg-muted">
+            Settings → Privacy &amp; Security → Location Services
+          </span>{" "}
+          — make sure it's on AND that Safari is allowed. Or skip ahead and tap
+          the map below.
+        </p>
+      )}
+
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />

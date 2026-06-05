@@ -9,7 +9,12 @@ import type { ProgressRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeamPage() {
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("user_progress")
@@ -20,6 +25,11 @@ export default async function TeamPage() {
 
   return (
     <div className="space-y-6">
+      {sp.deleted && (
+        <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+          Team member deleted.
+        </div>
+      )}
       <header>
         <h1 className="font-display text-2xl font-semibold tracking-tight">
           Team Members

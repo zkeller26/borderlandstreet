@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect, useState } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -25,6 +31,27 @@ function ClickableLayer({
   return null;
 }
 
+/**
+ * Re-pans the Leaflet map whenever the target lat/lng changes.
+ * MapContainer only honors `center`/`zoom` on initial mount — without this
+ * the map would never follow a pin dropped via the GPS button.
+ */
+function RecenterOnChange({
+  lat,
+  lng,
+  zoom,
+}: {
+  lat: number;
+  lng: number;
+  zoom: number;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([lat, lng], zoom, { animate: true });
+  }, [lat, lng, zoom, map]);
+  return null;
+}
+
 export default function PinPickerMap({
   initial,
   centerOn,
@@ -36,9 +63,17 @@ export default function PinPickerMap({
   centerOn?: { lat: number; lng: number } | null;
   onPick: (lat: number, lng: number) => void;
 }) {
+  // Internal marker state — seeded from `initial` and kept in sync with it
+  // so a pin dropped via the GPS button (which updates `initial`) shows up
+  // automatically on the map.
   const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(
     initial ?? null,
   );
+
+  useEffect(() => {
+    if (initial) setMarker(initial);
+  }, [initial?.lat, initial?.lng]);
+
   const center: [number, number] = marker
     ? [marker.lat, marker.lng]
     : centerOn
@@ -66,7 +101,10 @@ export default function PinPickerMap({
           }}
         />
         {marker && (
-          <Marker position={[marker.lat, marker.lng]} icon={emberIcon} />
+          <>
+            <Marker position={[marker.lat, marker.lng]} icon={emberIcon} />
+            <RecenterOnChange lat={marker.lat} lng={marker.lng} zoom={15} />
+          </>
         )}
       </MapContainer>
     </div>

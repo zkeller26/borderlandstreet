@@ -3,6 +3,9 @@ import { ArrowLeft } from "lucide-react";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { PhotoInput } from "@/components/upload/photo-input";
 import { GeoButton } from "@/components/upload/geo-button";
+
+export const dynamic = "force-dynamic";
+
 import { UploadForm } from "@/components/upload/upload-form";
 import { SubmitButton } from "@/components/upload/submit-button";
 import { POINTS } from "@/lib/points";

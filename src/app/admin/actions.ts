@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireAdmin() {
@@ -51,6 +52,19 @@ export async function rejectSubmissionAction(formData: FormData) {
   if (error) throw error;
   revalidatePath("/admin/submissions");
   revalidatePath("/admin");
+}
+
+export async function deleteTeamMemberAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  if (!id) throw new Error("Missing member id");
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase.rpc("admin_delete_member", {
+    member_id: id,
+  });
+  if (error) throw error;
+  revalidatePath("/admin/team");
+  revalidatePath("/admin");
+  redirect("/admin/team?deleted=1");
 }
 
 export async function markThreadReadAction(ambassadorId: string) {

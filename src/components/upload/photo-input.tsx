@@ -24,12 +24,17 @@ export function PhotoInput({ name = "photo" }: { name?: string }) {
 
   return (
     <div>
+      {/*
+        NOTE: no `capture` attribute on purpose. On iOS Safari `capture="environment"`
+        forces the rear camera and HIDES the photo library, so users can't pick an
+        existing photo. Omitting it lets iOS show its native "Take Photo / Photo
+        Library / Choose Files" picker.
+      */}
       <input
         ref={inputRef}
         type="file"
         name={name}
         accept="image/*"
-        capture="environment"
         required
         onChange={onChange}
         className="sr-only"
@@ -58,7 +63,9 @@ export function PhotoInput({ name = "photo" }: { name?: string }) {
           className="flex h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border-strong bg-surface-2/40 text-fg-muted transition-colors hover:border-ember/40 hover:bg-surface-2 hover:text-fg"
         >
           <Camera className="h-7 w-7" />
-          <span className="text-sm font-medium">Take photo or choose from library</span>
+          <span className="text-sm font-medium">
+            Take photo or choose from library
+          </span>
           <span className="text-xs text-fg-subtle">JPG / PNG · max 10 MB</span>
         </label>
       )}
