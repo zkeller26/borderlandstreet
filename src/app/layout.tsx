@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Anton, Inter } from "next/font/google";
 import "./globals.css";
+import { EmbedResizeBroadcaster } from "@/components/embed-resize-broadcaster";
 
 const display = Anton({
   weight: "400",
@@ -27,7 +28,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
-      <body>{children}</body>
+      <body>
+        <EmbedResizeBroadcaster />
+        {children}
+      </body>
     </html>
   );
 }
