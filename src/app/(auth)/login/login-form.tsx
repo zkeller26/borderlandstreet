@@ -6,7 +6,17 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({
+  next,
+  headingless = false,
+  hideSignupLink = false,
+}: {
+  next: string;
+  /** Skip the "Welcome back" h1 + subtitle (when parent provides them) */
+  headingless?: boolean;
+  /** Skip the bottom "New ambassador? Create an account" link */
+  hideSignupLink?: boolean;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +28,12 @@ export function LoginForm({ next }: { next: string }) {
     setError(null);
 
     const supabase = createClient();
-    const { data: signIn, error: err } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: signIn, error: err } = await supabase.auth.signInWithPassword(
+      {
+        email,
+        password,
+      },
+    );
 
     if (err || !signIn.user) {
       setError(err?.message ?? "Sign-in failed");
@@ -41,12 +53,16 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <div>
-      <h1 className="mb-1 font-display text-2xl font-semibold tracking-tight">
-        Welcome back
-      </h1>
-      <p className="mb-6 text-sm text-fg-muted">
-        Sign in to log your street team work.
-      </p>
+      {!headingless && (
+        <>
+          <h1 className="mb-1 font-display text-2xl font-semibold tracking-tight">
+            Welcome back
+          </h1>
+          <p className="mb-6 text-sm text-fg-muted">
+            Sign in to log your street team work.
+          </p>
+        </>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">
@@ -89,12 +105,14 @@ export function LoginForm({ next }: { next: string }) {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-fg-muted">
-        New ambassador?{" "}
-        <Link href="/signup" className="text-ember hover:underline">
-          Create an account
-        </Link>
-      </p>
+      {!hideSignupLink && (
+        <p className="mt-6 text-center text-sm text-fg-muted">
+          New ambassador?{" "}
+          <Link href="/signup" className="text-ember hover:underline">
+            Create an account
+          </Link>
+        </p>
+      )}
     </div>
   );
 }
