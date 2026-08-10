@@ -54,6 +54,24 @@ export async function rejectSubmissionAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+export async function changeMemberRoleAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  const role = formData.get("role") as string;
+  if (!id) throw new Error("Missing member id");
+  if (role !== "admin" && role !== "ambassador") {
+    throw new Error("Role must be admin or ambassador");
+  }
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase.rpc("admin_change_member_role", {
+    member_id: id,
+    new_role: role,
+  });
+  if (error) throw error;
+  revalidatePath("/admin/team");
+  revalidatePath(`/admin/team/${id}`);
+  revalidatePath("/admin");
+}
+
 export async function deleteTeamMemberAction(formData: FormData) {
   const id = formData.get("id") as string;
   if (!id) throw new Error("Missing member id");

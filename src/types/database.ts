@@ -86,6 +86,7 @@ export interface ProgressRow {
   hometown: string | null;
   target_areas: string[];
   flyer_events: string[];
+  role: Role;
   approved_points: number;
   approved_count: number;
   pending_count: number;

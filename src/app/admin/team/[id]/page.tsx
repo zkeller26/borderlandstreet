@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Send, Package, FileText } from "lucide-react";
+import { ArrowLeft, Send, Package, FileText, Shield } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -12,6 +12,7 @@ import { formatRelative } from "@/lib/utils";
 import { sendMessageAction } from "@/app/admin/actions";
 import { TeamMemberEditor } from "./team-member-editor";
 import { DeleteMemberButton } from "./delete-member-button";
+import { RoleToggleButton } from "./role-toggle-button";
 import type {
   Submission,
   Profile,
@@ -91,6 +92,9 @@ export default async function TeamMemberPage({
     (r) => r.status === "pending",
   ).length;
 
+  const isAdmin = (profile as Profile).role === "admin";
+  const isSelf = (profile as Profile).id === user.id;
+
   return (
     <div className="space-y-6">
       <Link
@@ -103,43 +107,60 @@ export default async function TeamMemberPage({
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
-              {(profile as Profile).full_name}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl font-semibold tracking-tight">
+                {(profile as Profile).full_name}
+              </h1>
+              {isAdmin && (
+                <Badge tone="ember" className="gap-1">
+                  <Shield className="h-3 w-3" /> Admin
+                </Badge>
+              )}
+              {isSelf && (
+                <Badge tone="neutral">You</Badge>
+              )}
+            </div>
             <p className="mt-1 text-sm text-fg-muted">
               {(profile as Profile).email}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs uppercase tracking-wider text-fg-muted">
-              Progress
-            </p>
-            <p className="font-display text-2xl font-semibold">
-              {total}
-              <span className="text-fg-subtle">/{TICKET_GOAL}</span>
-            </p>
-          </div>
-        </div>
-        <ProgressBar value={total} max={TICKET_GOAL} className="mt-3" />
-
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Approved", value: approved.length },
-            { label: "Pending", value: submissions.length - approved.length - submissions.filter((s) => s.status === "rejected").length },
-            { label: "Posters", value: byType.poster.filter((s) => s.status === "approved").length },
-            { label: "Flyers handed out", value: flyersTotal },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="rounded-xl border border-border bg-surface-2/40 px-3 py-3"
-            >
-              <p className="text-xl font-semibold tabular-nums">{s.value}</p>
-              <p className="text-xs text-fg-muted">{s.label}</p>
+          {!isAdmin && (
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wider text-fg-muted">
+                Progress
+              </p>
+              <p className="font-display text-2xl font-semibold">
+                {total}
+                <span className="text-fg-subtle">/{TICKET_GOAL}</span>
+              </p>
             </div>
-          ))}
+          )}
         </div>
+        {!isAdmin && (
+          <ProgressBar value={total} max={TICKET_GOAL} className="mt-3" />
+        )}
+
+        {!isAdmin && (
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Approved", value: approved.length },
+              { label: "Pending", value: submissions.length - approved.length - submissions.filter((s) => s.status === "rejected").length },
+              { label: "Posters", value: byType.poster.filter((s) => s.status === "approved").length },
+              { label: "Flyers handed out", value: flyersTotal },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="rounded-xl border border-border bg-surface-2/40 px-3 py-3"
+              >
+                <p className="text-xl font-semibold tabular-nums">{s.value}</p>
+                <p className="text-xs text-fg-muted">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
+      {!isAdmin && (
       <Card>
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-fg-muted">
@@ -223,6 +244,7 @@ export default async function TeamMemberPage({
           </ul>
         )}
       </Card>
+      )}
 
       <Card>
         <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-fg-muted">
@@ -231,6 +253,25 @@ export default async function TeamMemberPage({
         <TeamMemberEditor profile={profile as Profile} />
       </Card>
 
+      {!isSelf && (
+        <Card>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-fg-muted">
+            Role
+          </h2>
+          <p className="mb-4 text-sm text-fg-muted">
+            {isAdmin
+              ? "Admin — has full access to the admin panel."
+              : "Ambassador — uses the street team dashboard to log actions and earn a ticket."}
+          </p>
+          <RoleToggleButton
+            memberId={(profile as Profile).id}
+            memberName={(profile as Profile).full_name}
+            currentRole={(profile as Profile).role}
+          />
+        </Card>
+      )}
+
+      {!isAdmin && (
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-fg-muted">
           Actions by type
@@ -283,7 +324,9 @@ export default async function TeamMemberPage({
         })}
         {submissions.length === 0 && <Empty title="No submissions yet" />}
       </section>
+      )}
 
+      {!isSelf && (
       <Card>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-fg-muted">
           Chat
@@ -340,21 +383,26 @@ export default async function TeamMemberPage({
           </button>
         </form>
       </Card>
+      )}
 
-      <Card className="border-danger/20 bg-danger/[0.02]">
-        <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-danger">
-          Danger zone
-        </h2>
-        <p className="mb-4 text-sm text-fg-muted">
-          Permanently remove this team member and all their submissions,
-          messages, and material requests. Their auth account is also deleted,
-          so they can sign up again with the same email later if needed.
-        </p>
-        <DeleteMemberButton
-          memberId={(profile as Profile).id}
-          memberName={(profile as Profile).full_name}
-        />
-      </Card>
+      {!isSelf && (
+        <Card className="border-danger/20 bg-danger/[0.02]">
+          <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-danger">
+            Danger zone
+          </h2>
+          <p className="mb-4 text-sm text-fg-muted">
+            Permanently remove this{" "}
+            {isAdmin ? "admin" : "team member"} and all their
+            submissions, messages, and material requests. Their auth account is
+            also deleted, so they can sign up again with the same email later
+            if needed.
+          </p>
+          <DeleteMemberButton
+            memberId={(profile as Profile).id}
+            memberName={(profile as Profile).full_name}
+          />
+        </Card>
+      )}
     </div>
   );
 }
