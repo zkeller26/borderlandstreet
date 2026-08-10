@@ -74,6 +74,13 @@ export interface AdminMessage {
   read_at: string | null;
 }
 
+export interface TeamChatMessage {
+  id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
 export interface ProgressRow {
   user_id: string;
   full_name: string;

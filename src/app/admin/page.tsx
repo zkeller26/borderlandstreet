@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Trophy, Users, Inbox, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchTeamChat } from "@/lib/team-chat";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress";
 import { Empty } from "@/components/ui/empty";
+import { TeamChat } from "@/components/dashboard/team-chat";
 import { TICKET_GOAL } from "@/lib/points";
 import { formatRelative } from "@/lib/utils";
 import type { ProgressRow } from "@/types/database";
@@ -12,21 +14,30 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
 
-  const [{ data: progress }, { count: pendingCount }] = await Promise.all([
-    supabase
-      .from("user_progress")
-      .select("*")
-      .order("approved_points", { ascending: false }),
-    supabase
-      .from("submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending"),
-  ]);
+  const [{ data: progress }, { count: pendingCount }, teamChat] =
+    await Promise.all([
+      supabase
+        .from("user_progress")
+        .select("*")
+        .order("approved_points", { ascending: false }),
+      supabase
+        .from("submissions")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+      fetchTeamChat(user.id, 50),
+    ]);
 
   const rows = (progress ?? []) as ProgressRow[];
-  const totalAmbassadors = rows.length;
-  const unlocked = rows.filter((r) => r.approved_points >= TICKET_GOAL).length;
+  const ambassadorRows = rows.filter((r) => r.role === "ambassador");
+  const totalAmbassadors = ambassadorRows.length;
+  const unlocked = ambassadorRows.filter(
+    (r) => r.approved_points >= TICKET_GOAL,
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -74,11 +85,16 @@ export default async function AdminOverviewPage() {
         </Card>
       </div>
 
+      {/* Team-wide chat — same channel ambassadors see on their dashboard */}
+      <section>
+        <TeamChat messages={teamChat} />
+      </section>
+
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-fg-muted">
           Leaderboard
         </h2>
-        {rows.length === 0 ? (
+        {ambassadorRows.length === 0 ? (
           <Empty
             title="No ambassadors yet"
             description="Once people sign up they'll show up here."
@@ -86,7 +102,7 @@ export default async function AdminOverviewPage() {
         ) : (
           <Card className="p-0">
             <ul className="divide-y divide-border">
-              {rows.map((row, i) => (
+              {ambassadorRows.map((row, i) => (
                 <li
                   key={row.user_id}
                   className="flex items-center gap-4 px-4 py-3 sm:px-5"

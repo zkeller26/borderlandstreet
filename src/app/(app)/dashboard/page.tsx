@@ -1,13 +1,14 @@
-import Link from "next/link";
 import { Ticket, CheckCircle2, Clock, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signedPhotoUrls } from "@/lib/photos";
+import { fetchTeamChat } from "@/lib/team-chat";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress";
 import { Empty } from "@/components/ui/empty";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { SubmissionList } from "@/components/dashboard/submission-list";
 import { MyPinMap } from "@/components/dashboard/my-pin-map";
+import { TeamChat } from "@/components/dashboard/team-chat";
 import { TICKET_GOAL } from "@/lib/points";
 import type { Submission } from "@/types/database";
 import type { MapPin as MapPinT } from "@/components/admin/poster-map";
@@ -27,19 +28,23 @@ export default async function DashboardPage({
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: profile }, { data: submissions }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("first_name, full_name")
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("submissions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  const [{ data: profile }, { data: submissions }, teamChat] =
+    await Promise.all([
+      // maybeSingle() so a missing profile row doesn't throw (was causing
+      // a page-doesn't-exist error for users whose signup trigger raced)
+      supabase
+        .from("profiles")
+        .select("first_name, full_name")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("submissions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      fetchTeamChat(user.id, 50),
+    ]);
 
   const subs = (submissions ?? []) as Submission[];
   const approved = subs.filter((s) => s.status === "approved");
@@ -130,6 +135,11 @@ export default async function DashboardPage({
           </div>
         </Card>
       </div>
+
+      {/* Team-wide chat (above the map, per spec) */}
+      <section>
+        <TeamChat messages={teamChat} />
+      </section>
 
       <section>
         <div className="mb-3 flex items-center gap-2">

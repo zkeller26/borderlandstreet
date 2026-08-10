@@ -16,7 +16,8 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const [{ data: profile }, { count: unreadCount }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    // maybeSingle so a missing profile row doesn't crash the layout
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase
       .from("admin_messages")
       .select("id", { count: "exact", head: true })

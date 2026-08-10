@@ -21,79 +21,102 @@ export async function createSubmissionAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in" };
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Not signed in" };
 
-  const type = formData.get("type") as SubmissionType;
-  if (!type || !["poster", "event", "social"].includes(type)) {
-    return { ok: false, error: "Invalid submission type" };
+    const type = formData.get("type") as SubmissionType;
+    if (!type || !["poster", "event", "social"].includes(type)) {
+      return { ok: false, error: "Invalid submission type" };
+    }
+
+    const file = formData.get("photo") as File | null;
+    if (!file || file.size === 0) {
+      return { ok: false, error: "Please attach a photo" };
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return { ok: false, error: "Photo must be under 10 MB" };
+    }
+
+    const lat = formData.get("lat");
+    const lng = formData.get("lng");
+    if (type === "poster" && (!lat || !lng)) {
+      return { ok: false, error: "Drop a GPS pin to submit a poster" };
+    }
+
+    const platform = (formData.get("platform") as string | null) || null;
+    if (
+      type === "social" &&
+      (!platform || !SOCIAL_PLATFORMS.some((p) => p.value === platform))
+    ) {
+      return { ok: false, error: "Pick a social platform" };
+    }
+
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const month = new Date().toISOString().slice(0, 7);
+    const path = `${user.id}/${type}/${month}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("submission-photos")
+      .upload(path, file, {
+        contentType: file.type || "image/jpeg",
+        upsert: false,
+      });
+    if (uploadErr) {
+      console.error("[createSubmissionAction] upload failed", uploadErr);
+      return { ok: false, error: `Upload failed: ${uploadErr.message}` };
+    }
+
+    const points = pointsFor(type);
+
+    const row: Record<string, unknown> = {
+      user_id: user.id,
+      type,
+      status: "pending",
+      points,
+      photo_path: path,
+      notes: (formData.get("notes") as string) || null,
+    };
+
+    if (type === "poster") {
+      row.location_name = (formData.get("location_name") as string) || null;
+      row.lat = Number(lat);
+      row.lng = Number(lng);
+    } else if (type === "event") {
+      row.event_name = (formData.get("event_name") as string) || null;
+      row.venue = (formData.get("venue") as string) || null;
+      const flyers = formData.get("flyer_count");
+      row.flyer_count = flyers ? Number(flyers) : null;
+    } else if (type === "social") {
+      row.platform = platform;
+    }
+
+    const { error: insertErr } = await supabase.from("submissions").insert(row);
+    if (insertErr) {
+      console.error("[createSubmissionAction] insert failed", insertErr);
+      return { ok: false, error: `Save failed: ${insertErr.message}` };
+    }
+
+    revalidatePath("/dashboard");
+  } catch (err) {
+    // The special NEXT_REDIRECT "error" MUST re-throw for the redirect below
+    // to work — anything else is a real failure we want to surface.
+    if (err instanceof Error && err.message === "NEXT_REDIRECT") throw err;
+    console.error("[createSubmissionAction] unexpected error", err);
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.",
+    };
   }
 
-  const file = formData.get("photo") as File | null;
-  if (!file || file.size === 0) {
-    return { ok: false, error: "Please attach a photo" };
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    return { ok: false, error: "Photo must be under 10 MB" };
-  }
-
-  const lat = formData.get("lat");
-  const lng = formData.get("lng");
-  if (type === "poster" && (!lat || !lng)) {
-    return { ok: false, error: "Drop a GPS pin to submit a poster" };
-  }
-
-  const platform = (formData.get("platform") as string | null) || null;
-  if (
-    type === "social" &&
-    (!platform || !SOCIAL_PLATFORMS.some((p) => p.value === platform))
-  ) {
-    return { ok: false, error: "Pick a social platform" };
-  }
-
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-  const month = new Date().toISOString().slice(0, 7);
-  const path = `${user.id}/${type}/${month}/${crypto.randomUUID()}.${ext}`;
-
-  const { error: uploadErr } = await supabase.storage
-    .from("submission-photos")
-    .upload(path, file, {
-      contentType: file.type || "image/jpeg",
-      upsert: false,
-    });
-  if (uploadErr) return { ok: false, error: uploadErr.message };
-
-  const points = pointsFor(type);
-
-  const row: Record<string, unknown> = {
-    user_id: user.id,
-    type,
-    status: "pending",
-    points,
-    photo_path: path,
-    notes: (formData.get("notes") as string) || null,
-  };
-
-  if (type === "poster") {
-    row.location_name = (formData.get("location_name") as string) || null;
-    row.lat = Number(lat);
-    row.lng = Number(lng);
-  } else if (type === "event") {
-    row.event_name = (formData.get("event_name") as string) || null;
-    row.venue = (formData.get("venue") as string) || null;
-    const flyers = formData.get("flyer_count");
-    row.flyer_count = flyers ? Number(flyers) : null;
-  } else if (type === "social") {
-    row.platform = platform;
-  }
-
-  const { error: insertErr } = await supabase.from("submissions").insert(row);
-  if (insertErr) return { ok: false, error: insertErr.message };
-
-  revalidatePath("/dashboard");
+  // Redirect must be OUTSIDE the try/catch — Next.js implements it by throwing
+  // a special error that would otherwise be swallowed by the catch above.
   redirect("/dashboard?submitted=1");
 }
 
@@ -164,7 +187,6 @@ export async function createMaterialRequestAction(
 
   if (error) return { ok: false, error: error.message };
 
-  // URL slug is plural ("posters" / "flyers"); the DB type is singular ("poster" / "flyer")
   const slug = `${type}s`;
   revalidatePath(`/requests/${slug}`);
   redirect(`/requests/${slug}?submitted=${type}`);
@@ -183,13 +205,9 @@ export async function sendAmbassadorMessageAction(
   const body = ((formData.get("body") as string) || "").trim();
   if (!body) return { ok: false, error: "Write a message before sending." };
 
-  // Use the SECURITY DEFINER RPC — ambassadors can't see admin profile rows
-  // directly because of profiles RLS, so doing the lookup + insert inline
-  // would silently fail (empty admin list → no insert).
   const { error } = await supabase.rpc("send_message_to_admins", {
     message_body: body,
   });
-
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/messages");
@@ -206,4 +224,35 @@ export async function markMyMessagesReadAction() {
   await supabase.rpc("mark_messages_from_admin_read");
   revalidatePath("/messages");
   revalidatePath("/dashboard");
+}
+
+export type TeamChatState = {
+  ok: boolean;
+  error?: string;
+};
+
+export async function sendTeamChatAction(
+  _prev: TeamChatState,
+  formData: FormData,
+): Promise<TeamChatState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const body = ((formData.get("body") as string) || "").trim();
+  if (!body) return { ok: false, error: "Write a message." };
+  if (body.length > 2000) {
+    return { ok: false, error: "Message is too long (2000 char max)." };
+  }
+
+  const { error } = await supabase
+    .from("team_chat_messages")
+    .insert({ user_id: user.id, body });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+  return { ok: true };
 }

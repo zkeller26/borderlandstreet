@@ -54,22 +54,48 @@ export async function rejectSubmissionAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
-export async function changeMemberRoleAction(formData: FormData) {
-  const id = formData.get("id") as string;
-  const role = formData.get("role") as string;
-  if (!id) throw new Error("Missing member id");
-  if (role !== "admin" && role !== "ambassador") {
-    throw new Error("Role must be admin or ambassador");
+export type RoleChangeState = { ok: boolean; error?: string };
+
+export async function changeMemberRoleAction(
+  _prev: RoleChangeState,
+  formData: FormData,
+): Promise<RoleChangeState> {
+  try {
+    const id = formData.get("id") as string;
+    const role = formData.get("role") as string;
+    if (!id) return { ok: false, error: "Missing member id" };
+    if (role !== "admin" && role !== "ambassador") {
+      return { ok: false, error: "Role must be admin or ambassador" };
+    }
+    const { supabase } = await requireAdmin();
+    const { error } = await supabase.rpc("admin_change_member_role", {
+      member_id: id,
+      new_role: role,
+    });
+    if (error) {
+      console.error("[changeMemberRoleAction] RPC failed", error);
+      // Common case: migration 006 wasn't run yet
+      if (error.message?.includes("Could not find the function")) {
+        return {
+          ok: false,
+          error:
+            "Role-change function isn't installed. Run migration 006_manage_admins.sql in Supabase.",
+        };
+      }
+      return { ok: false, error: error.message };
+    }
+    revalidatePath("/admin/team");
+    revalidatePath(`/admin/team/${id}`);
+    revalidatePath("/admin");
+    return { ok: true };
+  } catch (err) {
+    console.error("[changeMemberRoleAction] unexpected", err);
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "Something went wrong.",
+    };
   }
-  const { supabase } = await requireAdmin();
-  const { error } = await supabase.rpc("admin_change_member_role", {
-    member_id: id,
-    new_role: role,
-  });
-  if (error) throw error;
-  revalidatePath("/admin/team");
-  revalidatePath(`/admin/team/${id}`);
-  revalidatePath("/admin");
 }
 
 export async function deleteTeamMemberAction(formData: FormData) {

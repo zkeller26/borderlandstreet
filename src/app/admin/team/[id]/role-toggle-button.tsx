@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Shield, ArrowDown, AlertTriangle } from "lucide-react";
-import { changeMemberRoleAction } from "@/app/admin/actions";
+import {
+  changeMemberRoleAction,
+  type RoleChangeState,
+} from "@/app/admin/actions";
 import type { Role } from "@/types/database";
+
+const initial: RoleChangeState = { ok: false };
 
 function ConfirmButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -29,24 +34,37 @@ export function RoleToggleButton({
   currentRole: Role;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [state, formAction] = useActionState(changeMemberRoleAction, initial);
   const promote = currentRole === "ambassador";
   const nextRole: Role = promote ? "admin" : "ambassador";
   const label = promote ? "Promote to admin" : "Demote to ambassador";
 
+  // On success, close the confirmation card
+  useEffect(() => {
+    if (state.ok) setConfirming(false);
+  }, [state.ok]);
+
   if (!confirming) {
     return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface-2 px-3 text-sm text-fg transition-colors hover:border-ember/40 hover:text-ember"
-      >
-        {promote ? (
-          <Shield className="h-4 w-4" />
-        ) : (
-          <ArrowDown className="h-4 w-4" />
+      <div className="space-y-2">
+        {state.ok && (
+          <p className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+            ✓ Role updated.
+          </p>
         )}
-        {label}
-      </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface-2 px-3 text-sm text-fg transition-colors hover:border-ember/40 hover:text-ember"
+        >
+          {promote ? (
+            <Shield className="h-4 w-4" />
+          ) : (
+            <ArrowDown className="h-4 w-4" />
+          )}
+          {label}
+        </button>
+      </div>
     );
   }
 
@@ -68,6 +86,12 @@ export function RoleToggleButton({
         </div>
       </div>
 
+      {state.error && (
+        <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          {state.error}
+        </p>
+      )}
+
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -76,7 +100,7 @@ export function RoleToggleButton({
         >
           Cancel
         </button>
-        <form action={changeMemberRoleAction}>
+        <form action={formAction}>
           <input type="hidden" name="id" value={memberId} />
           <input type="hidden" name="role" value={nextRole} />
           <ConfirmButton label={promote ? "Yes, promote" : "Yes, demote"} />
